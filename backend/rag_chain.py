@@ -24,6 +24,11 @@ from langchain_classic.retrievers import ContextualCompressionRetriever
 from pubmed_tool import format_paper_for_context
 
 
+# ── Preload models (loaded once at import time) ─────────────
+_embeddings = HuggingFaceEmbeddings(model_name="all-MiniLM-L6-v2")
+_cross_encoder = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+
+
 # ── System prompt ────────────────────────────────────────────
 SYSTEM_PROMPT = """You are BioMed RAG Agent, an AI research assistant specialising 
 in biomedical and clinical literature. You answer questions by synthesising 
@@ -80,13 +85,9 @@ def build_rag_chain(papers: List[Dict], api_key: str) -> tuple:
     chunks = splitter.split_documents(documents)
     
     # ── Step 3: Build hybrid retriever (vector + BM25) ──────
-    embeddings = HuggingFaceEmbeddings(
-        model_name="all-MiniLM-L6-v2",
-    )
-
     vectorstore = Chroma.from_documents(
         documents=chunks,
-        embedding=embeddings,
+        embedding=_embeddings,
         collection_name="pubmed_abstracts",
     )
 
@@ -103,8 +104,7 @@ def build_rag_chain(papers: List[Dict], api_key: str) -> tuple:
     )
 
     # ── Step 3b: Cross-encoder reranking ─────────────────────
-    cross_encoder = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
-    reranker = CrossEncoderReranker(model=cross_encoder, top_n=5)
+    reranker = CrossEncoderReranker(model=_cross_encoder, top_n=5)
     retriever = ContextualCompressionRetriever(
         base_compressor=reranker,
         base_retriever=ensemble_retriever,
