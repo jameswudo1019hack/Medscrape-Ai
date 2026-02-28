@@ -15,7 +15,7 @@ from fpdf import FPDF
 
 from google import genai
 
-from pubmed_tool import search_pubmed, fetch_abstracts
+from pubmed_tool import search_pubmed, fetch_abstracts, sort_papers_by_quality
 from rag_chain import build_rag_chain, query_with_sources
 
 
@@ -52,6 +52,7 @@ class SearchRequest(BaseModel):
     max_papers: int = 8
     sort: str = "relevance"
     date_range: str = "all"
+    study_type_filter: str = "all"
 
 
 class Source(BaseModel):
@@ -62,6 +63,7 @@ class Source(BaseModel):
     authors: str
     journal: str
     year: str
+    publication_type: str = "Journal Article"
 
 
 class SearchResponse(BaseModel):
@@ -110,6 +112,21 @@ async def search(request: SearchRequest):
             status_code=502,
             detail="Failed to fetch abstracts from PubMed. Please try again.",
         )
+
+    # Step 3b: Filter by study type (fall back to unfiltered if filter removes all)
+    if request.study_type_filter == "reviews":
+        review_types = {"Meta-Analysis", "Systematic Review", "Review"}
+        filtered = [p for p in papers if p.get("publication_type") in review_types]
+        if filtered:
+            papers = filtered
+    elif request.study_type_filter == "trials":
+        trial_types = {"Randomized Controlled Trial", "Clinical Trial", "Controlled Clinical Trial"}
+        filtered = [p for p in papers if p.get("publication_type") in trial_types]
+        if filtered:
+            papers = filtered
+
+    # Step 3c: Sort by evidence quality
+    papers = sort_papers_by_quality(papers)
 
     # Step 4: Build RAG chain and query
     rag_result = build_rag_chain(papers, request.api_key)

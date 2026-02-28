@@ -101,6 +101,26 @@ export function SearchSettingsPanel({ settings, onChange }: SearchSettingsProps)
           </SelectContent>
         </Select>
       </div>
+
+      {/* Study Type Filter */}
+      <div className="space-y-2">
+        <Label>Preferred study type</Label>
+        <Select
+          value={settings.studyTypeFilter}
+          onValueChange={(value: "all" | "reviews" | "trials") =>
+            onChange({ ...settings, studyTypeFilter: value })
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="all">All types (default)</SelectItem>
+            <SelectItem value="reviews">Reviews & Meta-analyses</SelectItem>
+            <SelectItem value="trials">Clinical Trials</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 }

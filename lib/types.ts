@@ -3,6 +3,7 @@ export interface SearchSettings {
   maxPapers: number
   sort: "relevance" | "date"
   dateRange: "all" | "1" | "5"
+  studyTypeFilter: "all" | "reviews" | "trials"
 }
 
 export interface Source {
@@ -13,6 +14,7 @@ export interface Source {
   authors: string
   journal: string
   year: string
+  publication_type: string
 }
 
 export interface SearchResult {

@@ -72,6 +72,7 @@ def build_rag_chain(papers: List[Dict], api_key: str) -> tuple:
                 "authors": paper["authors"],
                 "journal": paper["journal"],
                 "year": paper["year"],
+                "publication_type": paper.get("publication_type", "Journal Article"),
             }
         )
         documents.append(doc)

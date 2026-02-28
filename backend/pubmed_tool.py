@@ -14,6 +14,28 @@ from typing import List, Dict
 ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
 
+PUBLICATION_TYPE_RANK: Dict[str, int] = {
+    "Meta-Analysis": 9,
+    "Systematic Review": 8,
+    "Randomized Controlled Trial": 7,
+    "Clinical Trial": 6,
+    "Controlled Clinical Trial": 6,
+    "Review": 5,
+    "Comparative Study": 4,
+    "Observational Study": 4,
+    "Multicenter Study": 3,
+    "Case Reports": 2,
+    "Journal Article": 1,
+}
+
+
+def _best_publication_type(pub_types: List[str]) -> str:
+    """Pick the highest-ranked publication type from a list."""
+    if not pub_types:
+        return "Journal Article"
+    best = max(pub_types, key=lambda t: PUBLICATION_TYPE_RANK.get(t, 0))
+    return best if PUBLICATION_TYPE_RANK.get(best, 0) > 0 else pub_types[0]
+
 
 def search_pubmed(
     query: str,
@@ -147,7 +169,14 @@ def _parse_article(article_elem) -> Dict:
         if not year:
             medline_date = article_elem.findtext(".//PubDate/MedlineDate", default="")
             year = medline_date[:4] if medline_date else ""
-        
+
+        # Publication types
+        pub_types = [
+            pt.text for pt in article_elem.findall(".//PublicationType")
+            if pt.text
+        ]
+        publication_type = _best_publication_type(pub_types)
+
         return {
             "pmid": pmid,
             "title": title,
@@ -156,6 +185,7 @@ def _parse_article(article_elem) -> Dict:
             "authors": author_str,
             "journal": journal,
             "year": year,
+            "publication_type": publication_type,
         }
     
     except Exception:
@@ -168,6 +198,16 @@ def format_paper_for_context(paper: Dict) -> str:
         f"Title: {paper['title']}\n"
         f"Authors: {paper['authors']}\n"
         f"Journal: {paper['journal']} ({paper['year']})\n"
+        f"Study Type: {paper.get('publication_type', 'Journal Article')}\n"
         f"PMID: {paper['pmid']}\n"
         f"Abstract: {paper['abstract']}"
+    )
+
+
+def sort_papers_by_quality(papers: List[Dict]) -> List[Dict]:
+    """Sort papers by evidence quality (highest first). Stable sort preserves relevance order within same tier."""
+    return sorted(
+        papers,
+        key=lambda p: PUBLICATION_TYPE_RANK.get(p.get("publication_type", "Journal Article"), 0),
+        reverse=True,
     )

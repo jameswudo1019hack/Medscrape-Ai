@@ -14,6 +14,7 @@ export default function SearchPage() {
     maxPapers: 8,
     sort: "relevance",
     dateRange: "all",
+    studyTypeFilter: "all",
   })
   const [result, setResult] = useState<SearchResult | null>(null)
   const [lastQuery, setLastQuery] = useState("")
@@ -36,6 +37,7 @@ export default function SearchPage() {
           max_papers: settings.maxPapers,
           sort: settings.sort,
           date_range: settings.dateRange,
+          study_type_filter: settings.studyTypeFilter,
         }),
       })
 
