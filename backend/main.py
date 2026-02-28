@@ -5,6 +5,7 @@ Wraps existing PubMed search + RAG chain into a REST API.
 
 import io
 import re
+import time
 
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -34,6 +35,83 @@ def expand_query(query: str, api_key: str) -> List[str]:
     )
     lines = [line.strip() for line in resp.text.strip().splitlines() if line.strip()]
     return lines[:3]
+
+
+def _local_decompose(query: str) -> Optional[List[str]]:
+    """Regex-based fallback to split comparison/multi-entity queries without LLM."""
+    q = query.strip()
+
+    # Strip leading filler words: "compare", "what is the role of", "difference between", etc.
+    q_clean = re.sub(
+        r'^(compare|comparing|what\s+is\s+the\s+role\s+of|role\s+of|difference\s+between|differences\s+between)\s+',
+        '', q, flags=re.IGNORECASE,
+    ).strip()
+
+    # Pattern: "A vs B (context)" or "A versus B (context)"
+    m = re.match(r'(.+?)\s+(?:vs\.?|versus)\s+(.+)', q_clean, re.IGNORECASE)
+    if m:
+        a, b = m.group(1).strip(), m.group(2).strip()
+        # Check if there's a shared context after B, e.g. "B for sickle cell"
+        ctx_match = re.match(r'(.+?)\s+(?:for|in|on|during|treating|treatment\s+of)\s+(.+)', b, re.IGNORECASE)
+        if ctx_match:
+            b_entity, context = ctx_match.group(1).strip(), ctx_match.group(2).strip()
+            return [f"{a} {context}", f"{b_entity} {context}"]
+        return [a, b]
+
+    # Pattern: "A and B in/for C"
+    m = re.match(r'(.+?)\s+and\s+(.+?)\s+(?:in|for|on|during|treating|treatment\s+of)\s+(.+)', q_clean, re.IGNORECASE)
+    if m:
+        a, b, context = m.group(1).strip(), m.group(2).strip(), m.group(3).strip()
+        return [f"{a} {context}", f"{b} {context}"]
+
+    return None
+
+
+def decompose_query(query: str, api_key: str) -> List[str]:
+    """Split complex queries (comparisons, multi-entity) into focused sub-queries.
+
+    Returns a list of 2-4 sub-queries for complex questions, or [query] for simple ones.
+    Uses Gemini when available, with a regex-based fallback.
+    """
+    # Try LLM-based decomposition first
+    client = genai.Client(api_key=api_key)
+    try:
+        resp = client.models.generate_content(
+            model="gemini-2.0-flash",
+            contents=(
+                "You are a biomedical search strategist. Given a research question, "
+                "generate 2-4 focused PubMed sub-queries that together cover all aspects "
+                "of the question. Each sub-query should be a simple keyword search "
+                "(no boolean operators) targeting one specific entity or aspect.\n\n"
+                "If the question is already simple and focused on a single topic, "
+                "reply with exactly: SIMPLE\n\n"
+                "Otherwise reply with 2-4 sub-queries, one per line, no numbering or explanation.\n\n"
+                "Examples:\n"
+                "Q: compare CRISPR vs base editing for sickle cell\n"
+                "CRISPR gene editing sickle cell disease\n"
+                "base editing sickle cell disease\n\n"
+                "Q: role of IL-6 and TNF-alpha in rheumatoid arthritis\n"
+                "IL-6 rheumatoid arthritis\n"
+                "TNF-alpha rheumatoid arthritis\n\n"
+                "Q: metformin mechanism of action\n"
+                "SIMPLE\n\n"
+                f"Q: {query}"
+            ),
+        )
+        lines = [line.strip() for line in resp.text.strip().splitlines() if line.strip()]
+        if not lines or lines[0].upper() == "SIMPLE":
+            return [query]
+        return lines[:4]
+    except Exception:
+        pass
+
+    # Fallback: regex-based decomposition
+    local = _local_decompose(query)
+    if local:
+        return local
+
+    return [query]
+
 
 app = FastAPI(title="Synapse AI API", version="1.0.0")
 
@@ -80,23 +158,27 @@ async def search(request: SearchRequest):
     if not request.api_key.strip():
         raise HTTPException(status_code=400, detail="API key is required")
 
-    # Step 1: Expand query with medical synonyms
-    queries = [request.query]
-    try:
-        alt_queries = expand_query(request.query, request.api_key)
-        queries.extend(alt_queries)
-    except Exception:
-        pass  # Fall back to original query only
+    # Step 0: Decompose complex queries into focused sub-queries
+    sub_queries = decompose_query(request.query, request.api_key)
 
-    # Step 2: Search PubMed with all query variants and deduplicate
+    # Step 1: For each sub-query, expand and search PubMed, then deduplicate
     seen = set()
     pmids = []
-    per_query = max(request.max_papers // len(queries), 3)
-    for q in queries:
-        for pmid in search_pubmed(q, max_results=per_query, sort=request.sort, date_range=request.date_range):
-            if pmid not in seen:
-                seen.add(pmid)
-                pmids.append(pmid)
+    per_sub_query = max(request.max_papers // len(sub_queries), 3)
+    for sq in sub_queries:
+        variants = [sq]
+        try:
+            variants.extend(expand_query(sq, request.api_key))
+        except Exception:
+            pass
+        per_variant = max(per_sub_query // len(variants), 2)
+        for v in variants:
+            time.sleep(0.4)  # NCBI rate limit: 3 req/s without API key
+            results = search_pubmed(v, max_results=per_variant, sort=request.sort, date_range=request.date_range)
+            for pmid in results:
+                if pmid not in seen:
+                    seen.add(pmid)
+                    pmids.append(pmid)
 
     if not pmids:
         raise HTTPException(
