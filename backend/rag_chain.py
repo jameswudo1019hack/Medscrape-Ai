@@ -16,7 +16,10 @@ from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnablePassthrough
 from langchain_core.output_parsers import StrOutputParser
 from langchain_community.retrievers import BM25Retriever
+from langchain_community.cross_encoders import HuggingFaceCrossEncoder
 from langchain_classic.retrievers import EnsembleRetriever
+from langchain_classic.retrievers.document_compressors import CrossEncoderReranker
+from langchain_classic.retrievers import ContextualCompressionRetriever
 
 from pubmed_tool import format_paper_for_context
 
@@ -89,14 +92,22 @@ def build_rag_chain(papers: List[Dict], api_key: str) -> tuple:
 
     vector_retriever = vectorstore.as_retriever(
         search_type="similarity",
-        search_kwargs={"k": min(4, len(chunks))},
+        search_kwargs={"k": min(15, len(chunks))},
     )
 
-    bm25_retriever = BM25Retriever.from_documents(chunks, k=min(4, len(chunks)))
+    bm25_retriever = BM25Retriever.from_documents(chunks, k=min(15, len(chunks)))
 
-    retriever = EnsembleRetriever(
+    ensemble_retriever = EnsembleRetriever(
         retrievers=[vector_retriever, bm25_retriever],
         weights=[0.6, 0.4],
+    )
+
+    # ── Step 3b: Cross-encoder reranking ─────────────────────
+    cross_encoder = HuggingFaceCrossEncoder(model_name="cross-encoder/ms-marco-MiniLM-L-6-v2")
+    reranker = CrossEncoderReranker(model=cross_encoder, top_n=5)
+    retriever = ContextualCompressionRetriever(
+        base_compressor=reranker,
+        base_retriever=ensemble_retriever,
     )
     
     # ── Step 4: Build chain ──────────────────────────────────
