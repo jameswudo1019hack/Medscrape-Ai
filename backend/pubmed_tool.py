@@ -7,6 +7,7 @@ import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import time
+from datetime import datetime, timedelta
 from typing import List, Dict
 
 
@@ -18,25 +19,37 @@ def search_pubmed(
     query: str,
     max_results: int = 8,
     sort: str = "relevance",
+    date_range: str = "all",
 ) -> List[str]:
     """
     Search PubMed and return a list of PMIDs.
-    
+
     Args:
         query: Search query string (supports PubMed syntax)
         max_results: Maximum number of results to return
         sort: Sort order — 'relevance' or 'date'
-    
+        date_range: Date filter — 'all', '1' (last year), or '5' (last 5 years)
+
     Returns:
         List of PMID strings
     """
-    params = urllib.parse.urlencode({
+    params_dict = {
         "db": "pubmed",
         "term": query,
         "retmax": max_results,
         "sort": sort,
         "retmode": "xml",
-    })
+    }
+
+    if date_range in ("1", "5"):
+        years = int(date_range)
+        min_date = (datetime.now() - timedelta(days=365 * years)).strftime("%Y/%m/%d")
+        max_date = datetime.now().strftime("%Y/%m/%d")
+        params_dict["mindate"] = min_date
+        params_dict["maxdate"] = max_date
+        params_dict["datetype"] = "pdat"
+
+    params = urllib.parse.urlencode(params_dict)
     
     url = f"{ESEARCH_URL}?{params}"
     

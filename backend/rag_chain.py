@@ -104,7 +104,7 @@ def build_rag_chain(papers: List[Dict], api_key: str) -> tuple:
     )
 
     # ── Step 3b: Cross-encoder reranking ─────────────────────
-    reranker = CrossEncoderReranker(model=_cross_encoder, top_n=5)
+    reranker = CrossEncoderReranker(model=_cross_encoder, top_n=10)
     retriever = ContextualCompressionRetriever(
         base_compressor=reranker,
         base_retriever=ensemble_retriever,
