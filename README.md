@@ -6,6 +6,67 @@ I built this because I was spending hours manually searching PubMed for literatu
 
 ---
 
+## Quick Start
+
+### Prerequisites
+
+- **Node.js** 18+
+- **Python** 3.10+
+- A free [Google Gemini API key](https://aistudio.google.com/app/apikey)
+
+### 1. Clone the repository
+
+```bash
+git clone https://github.com/jameswudo1019hack/Medscrape-Ai.git
+cd Medscrape-Ai
+```
+
+### 2. Install frontend dependencies
+
+```bash
+npm install
+```
+
+### 3. Set up the Python backend
+
+```bash
+cd backend
+python -m venv venv
+source venv/bin/activate    # On Windows: venv\Scripts\activate
+pip install -r requirements.txt
+cd ..
+```
+
+> **Note:** The first run will download two ML models (~500 MB total):
+> - `pritamdeka/S-PubMedBert-MS-MARCO` (PubMedBERT embeddings)
+> - `cross-encoder/ms-marco-MiniLM-L-12-v2` (cross-encoder reranker)
+>
+> These are cached locally after the first download.
+
+### 4. Run both servers
+
+```bash
+npm run dev
+```
+
+This starts the Next.js frontend on `localhost:3000` and the FastAPI backend on `localhost:8000` concurrently.
+
+Or run them separately in two terminals:
+
+```bash
+# Terminal 1 — Frontend
+npm run dev:frontend   # Next.js on :3000
+
+# Terminal 2 — Backend
+npm run dev:backend    # FastAPI on :8000
+```
+
+### 5. Search
+
+Open [http://localhost:3000](http://localhost:3000), enter your Gemini API key in the settings panel, and start asking questions. Your API key is saved in localStorage so you only need to enter it once.
+
+---
+
 ## How It Works
 
 ```
@@ -90,6 +151,17 @@ Uses a **LangGraph StateGraph** for iterative multi-step reasoning:
 
 ---
 
+## Example Queries
+
+- *"What are the current approaches to drug-resistant epilepsy treatment?"*
+- *"How does GHK-Cu affect wound healing and collagen synthesis?"*
+- *"Compare CRISPR-Cas9 and base editing for sickle cell disease therapy"*
+- *"What biomarkers predict Alzheimer's disease progression?"*
+- *"What is the role of transformer models in ECG arrhythmia detection?"*
+- *"Compare metformin vs GLP-1 agonists for type 2 diabetes management"*
+
+---
+
 ## Tech Stack
 
 | Component | Technology |
@@ -109,65 +181,10 @@ Uses a **LangGraph StateGraph** for iterative multi-step reasoning:
 
 ---
 
-## Quick Start
-
-### Prerequisites
-
-- Node.js 18+
-- Python 3.10+
-- A free [Google Gemini API key](https://aistudio.google.com/app/apikey)
-
-### 1. Clone and install
-
-```bash
-git clone https://github.com/jameswu5/medscrape.git
-cd medscrape
-
-# Frontend dependencies
-npm install
-
-# Backend dependencies
-cd backend
-pip install -r requirements.txt
-cd ..
-```
-
-### 2. Run both servers
-
-```bash
-npm run dev
-```
-
-This starts the Next.js frontend on `localhost:3000` and the FastAPI backend on `localhost:8000` concurrently.
-
-Or run them separately:
-
-```bash
-npm run dev:frontend   # Next.js on :3000
-npm run dev:backend    # FastAPI on :8000
-```
-
-### 3. Search
-
-Open `http://localhost:3000`, enter your Gemini API key in settings, and start asking questions.
-
----
-
-## Example Queries
-
-- *"What are the current approaches to drug-resistant epilepsy treatment?"*
-- *"How does GHK-Cu affect wound healing and collagen synthesis?"*
-- *"Compare CRISPR-Cas9 and base editing for sickle cell disease therapy"*
-- *"What biomarkers predict Alzheimer's disease progression?"*
-- *"What is the role of transformer models in ECG arrhythmia detection?"*
-- *"Compare metformin vs GLP-1 agonists for type 2 diabetes management"*
-
----
-
 ## Project Structure
 
 ```
-medscrape/
+Medscrape-Ai/
 ├── app/
 │   ├── page.tsx                        # Main search interface
 │   ├── layout.tsx                      # Root layout with theme provider
@@ -176,7 +193,6 @@ medscrape/
 │   ├── how-it-works/page.tsx           # How it works page
 │   ├── api/
 │   │   ├── search/
-│   │   │   ├── route.ts                # Search API proxy
 │   │   │   ├── stream/route.ts         # SSE streaming search proxy
 │   │   │   └── agent-stream/route.ts   # Deep Research agent proxy
 │   │   └── export/pdf/route.ts         # PDF export proxy
@@ -247,6 +263,28 @@ Each query searches for different papers, so a persistent store would accumulate
 
 **Why Gemini?**
 The free tier provides sufficient quality for abstract synthesis at zero cost, making this tool accessible to any student or researcher. Gemini 2.5 Pro's large context window handles the full-text sections without truncation.
+
+---
+
+## Troubleshooting
+
+**Backend won't start / `ModuleNotFoundError`**
+Make sure you activated the virtual environment before installing dependencies:
+```bash
+source backend/venv/bin/activate
+pip install -r backend/requirements.txt
+```
+
+**Slow first search**
+The first query downloads PubMedBERT and the cross-encoder model (~500 MB). Subsequent queries use the cached models and are much faster.
+
+**"Network error" on search**
+Check that both servers are running. The frontend (`localhost:3000`) proxies API calls to the backend (`localhost:8000`). If you started them separately, make sure the backend is up first.
+
+**No results / empty answer**
+- Verify your Gemini API key is valid (check the settings panel)
+- Try a simpler query — very niche topics may have few PubMed results
+- Check the Search Transparency panel to see how many papers were found at each stage
 
 ---
 
