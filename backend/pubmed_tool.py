@@ -3,16 +3,20 @@ PubMed Tool — Search and fetch abstracts from NCBI PubMed.
 Uses the Entrez E-utilities API (free, no key required for <3 req/s).
 """
 
+import json
 import urllib.request
 import urllib.parse
 import xml.etree.ElementTree as ET
 import time
 from datetime import datetime, timedelta
-from typing import List, Dict
+from typing import List, Dict, Any, Optional
 
 
 ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+
+# Module-level cache for MeSH lookups within a session
+_mesh_cache: Dict[str, Optional[Dict[str, Any]]] = {}
 
 PUBLICATION_TYPE_RANK: Dict[str, int] = {
     "Meta-Analysis": 9,
@@ -35,6 +39,116 @@ def _best_publication_type(pub_types: List[str]) -> str:
         return "Journal Article"
     best = max(pub_types, key=lambda t: PUBLICATION_TYPE_RANK.get(t, 0))
     return best if PUBLICATION_TYPE_RANK.get(best, 0) > 0 else pub_types[0]
+
+
+def lookup_mesh_terms(query: str) -> Dict[str, Dict[str, Any]]:
+    """Look up MeSH descriptors for a query using NCBI E-utilities.
+
+    Searches the MeSH database to find official descriptors and entry terms
+    (synonyms) for the query. Uses esearch (db=mesh) to find UIDs, then
+    efetch to get descriptor details including entry terms.
+
+    Returns:
+        Dict mapping descriptor name → {mesh_id, entry_terms: list[str]}
+        Empty dict if no MeSH match found.
+    """
+    # Check cache first
+    cache_key = query.lower().strip()
+    if cache_key in _mesh_cache:
+        return _mesh_cache[cache_key] or {}
+
+    try:
+        # Step 1: Search MeSH database for the query
+        params = urllib.parse.urlencode({
+            "db": "mesh",
+            "term": query,
+            "retmax": 3,
+            "retmode": "json",
+        })
+        url = f"{ESEARCH_URL}?{params}"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            data = json.loads(resp.read())
+
+        ids = data.get("esearchresult", {}).get("idlist", [])
+        if not ids:
+            _mesh_cache[cache_key] = None
+            return {}
+
+        # Step 2: Fetch MeSH descriptor details (entry terms)
+        params = urllib.parse.urlencode({
+            "db": "mesh",
+            "id": ",".join(ids[:3]),
+            "retmode": "xml",
+        })
+        url = f"{EFETCH_URL}?{params}"
+        with urllib.request.urlopen(url, timeout=5) as resp:
+            xml_data = resp.read()
+
+        root = ET.fromstring(xml_data)
+        results = {}
+
+        for record in root.findall(".//DescriptorRecord"):
+            name_elem = record.find(".//DescriptorName/String")
+            if name_elem is None or not name_elem.text:
+                continue
+            descriptor = name_elem.text
+            uid = record.find(".//DescriptorUI")
+            mesh_id = uid.text if uid is not None else ""
+
+            # Collect all entry terms (synonyms) from concepts
+            entry_terms = []
+            for term in record.findall(".//Term/String"):
+                if term.text and term.text != descriptor:
+                    entry_terms.append(term.text)
+
+            results[descriptor] = {
+                "mesh_id": mesh_id,
+                "entry_terms": entry_terms[:8],
+            }
+
+        _mesh_cache[cache_key] = results if results else None
+        return results
+
+    except Exception as e:
+        print(f"MeSH lookup error: {e}")
+        _mesh_cache[cache_key] = None
+        return {}
+
+
+def build_mesh_queries(query: str, mesh_data: Dict[str, Dict]) -> List[str]:
+    """Build MeSH-enhanced PubMed queries from lookup results.
+
+    Returns a list of query variants:
+      1. The original query with MeSH-tagged descriptors
+      2. 1-2 entry-term based variants for broader recall
+
+    If no MeSH data, returns an empty list (caller falls back to plain text).
+    """
+    if not mesh_data:
+        return []
+
+    variants = []
+
+    # Pick the best (first) descriptor
+    descriptor = next(iter(mesh_data))
+    info = mesh_data[descriptor]
+
+    # Variant 1: explicit MeSH-tagged query
+    mesh_query = f'"{descriptor}"[MeSH Terms]'
+    # Append any remaining words from original query not in the descriptor
+    remaining = query.lower()
+    for word in descriptor.lower().split():
+        remaining = remaining.replace(word, "").strip()
+    remaining = " ".join(remaining.split())
+    if remaining and len(remaining) > 2:
+        mesh_query += f" {remaining}"
+    variants.append(mesh_query)
+
+    # Variant 2-3: entry term variants (use top synonyms)
+    for term in info.get("entry_terms", [])[:2]:
+        variants.append(term)
+
+    return variants
 
 
 def search_pubmed(
@@ -148,7 +262,7 @@ def _parse_article(article_elem) -> Dict:
                 abstract_parts.append(f"{label}: {text}")
             else:
                 abstract_parts.append(text)
-        abstract = " ".join(abstract_parts) if abstract_parts else "No abstract available."
+        abstract = "\n\n".join(abstract_parts) if abstract_parts else "No abstract available."
         
         # Authors
         authors = []
@@ -177,6 +291,13 @@ def _parse_article(article_elem) -> Dict:
         ]
         publication_type = _best_publication_type(pub_types)
 
+        # DOI
+        doi = ""
+        for article_id in article_elem.findall(".//ArticleId"):
+            if article_id.get("IdType") == "doi" and article_id.text:
+                doi = article_id.text
+                break
+
         return {
             "pmid": pmid,
             "title": title,
@@ -186,6 +307,7 @@ def _parse_article(article_elem) -> Dict:
             "journal": journal,
             "year": year,
             "publication_type": publication_type,
+            "doi": doi,
         }
     
     except Exception:

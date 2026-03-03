@@ -1,83 +1,77 @@
 "use client"
 
-import { useState } from "react"
 import Link from "next/link"
+import { usePathname } from "next/navigation"
+import { useTheme } from "next-themes"
+import { Brain, Sun, Moon } from "lucide-react"
 import { Button } from "@/components/ui/button"
-import { Menu, X, Dna } from "lucide-react"
 import { cn } from "@/lib/utils"
+import { useEffect, useState } from "react"
 
-const navItems = [
-  { label: "Features", href: "#features" },
-  { label: "How it works", href: "#how-it-works" },
-  { label: "FAQ", href: "#faq" },
+const navLinks = [
+  { href: "/", label: "Search" },
+  { href: "/how-it-works", label: "How It Works" },
+  { href: "/faq", label: "FAQ" },
 ]
 
 export function Navbar() {
-  const [isOpen, setIsOpen] = useState(false)
+  const { theme, setTheme } = useTheme()
+  const [mounted, setMounted] = useState(false)
+  const pathname = usePathname()
+
+  useEffect(() => {
+    setMounted(true)
+  }, [])
 
   return (
-    <header className="sticky top-0 z-50 w-full border-b border-border/40 bg-background/95 backdrop-blur supports-[backdrop-filter]:bg-background/60">
-      <div className="mx-auto flex h-16 max-w-7xl items-center justify-between px-4 sm:px-6 lg:px-8">
-        {/* Logo */}
-        <Link href="/" className="flex items-center gap-2">
-          <div className="flex h-8 w-8 items-center justify-center rounded-md bg-foreground">
-            <Dna className="h-5 w-5 text-background" />
-          </div>
-          <span className="text-lg font-semibold">Synapse AI</span>
-        </Link>
+    <header className="sticky top-0 z-50 w-full border-b border-border/50 bg-background/80 backdrop-blur-xl">
+      <div className="flex h-14 items-center justify-between px-4 lg:px-6">
+        <div className="flex items-center gap-6">
+          <Link href="/" className="flex items-center gap-2.5">
+            <div className="flex items-center justify-center rounded-lg bg-primary/10 p-1.5">
+              <Brain className="size-5 text-primary" />
+            </div>
+            <span className="text-lg font-semibold tracking-tight text-foreground">
+              MedScrape
+            </span>
+          </Link>
 
-        {/* Desktop Navigation */}
-        <nav className="hidden items-center gap-1 md:flex">
-          {navItems.map((item) => (
-            <Link
-              key={item.label}
-              href={item.href}
-              className={cn(
-                "flex items-center gap-1 px-4 py-2 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-              )}
-            >
-              {item.label}
-            </Link>
-          ))}
-        </nav>
-
-        {/* CTA Button */}
-        <div className="hidden md:block">
-          <Button className="bg-teal text-foreground hover:bg-teal-hover" asChild>
-            <Link href="/search">Start searching</Link>
-          </Button>
-        </div>
-
-        {/* Mobile Menu Button */}
-        <button
-          className="md:hidden"
-          onClick={() => setIsOpen(!isOpen)}
-          aria-label="Toggle menu"
-        >
-          {isOpen ? <X className="h-6 w-6" /> : <Menu className="h-6 w-6" />}
-        </button>
-      </div>
-
-      {/* Mobile Navigation */}
-      {isOpen && (
-        <div className="border-t md:hidden">
-          <nav className="flex flex-col px-4 py-4">
-            {navItems.map((item) => (
+          <nav className="hidden items-center gap-1 md:flex" aria-label="Main navigation">
+            {navLinks.map((link) => (
               <Link
-                key={item.label}
-                href={item.href}
-                className="flex items-center justify-between py-3 text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
-                onClick={() => setIsOpen(false)}
+                key={link.href}
+                href={link.href}
+                className={cn(
+                  "rounded-md px-3 py-1.5 text-sm font-medium transition-colors",
+                  pathname === link.href
+                    ? "text-foreground"
+                    : "text-muted-foreground hover:text-foreground"
+                )}
               >
-                {item.label}
+                {link.label}
               </Link>
             ))}
-            <Button className="mt-4 bg-teal text-foreground hover:bg-teal-hover" asChild>
-              <Link href="/search">Start searching</Link>
-            </Button>
           </nav>
         </div>
-      )}
+
+        <div className="flex items-center gap-2">
+          {mounted && (
+            <Button
+              variant="ghost"
+              size="icon-sm"
+              onClick={() => setTheme(theme === "dark" ? "light" : "dark")}
+              aria-label="Toggle theme"
+              className="text-muted-foreground hover:text-foreground"
+            >
+              {theme === "dark" ? (
+                <Sun className="size-4" />
+              ) : (
+                <Moon className="size-4" />
+              )}
+            </Button>
+          )}
+        </div>
+      </div>
     </header>
   )
 }

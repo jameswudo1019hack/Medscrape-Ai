@@ -21,7 +21,7 @@ export async function POST(request: NextRequest) {
     return new NextResponse(pdfBuffer, {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": "attachment; filename=synapse-report.pdf",
+        "Content-Disposition": "attachment; filename=medscrape-report.pdf",
       },
     })
   } catch {

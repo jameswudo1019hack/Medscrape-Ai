@@ -1,12 +1,16 @@
 "use client"
 
-import { useState } from "react"
+import { useState, useEffect } from "react"
 import { Navbar } from "@/components/navbar"
 import { Footer } from "@/components/footer"
 import { SearchInput } from "./components/search-input"
 import { ResultsPanel } from "./components/results-panel"
+import { SearchHistory } from "./components/search-history"
+import { FollowUpInput } from "./components/follow-up-input"
+import { LoadingProgress } from "./components/loading-progress"
 import { Dna } from "lucide-react"
-import type { SearchSettings, SearchResult } from "@/lib/types"
+import { getHistory, addToHistory, clearHistory } from "@/lib/search-history"
+import type { SearchSettings, SearchResult, HistoryEntry } from "@/lib/types"
 
 export default function SearchPage() {
   const [settings, setSettings] = useState<SearchSettings>({
@@ -20,15 +24,24 @@ export default function SearchPage() {
   const [lastQuery, setLastQuery] = useState("")
   const [isLoading, setIsLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [history, setHistory] = useState<HistoryEntry[]>([])
 
-  const handleSearch = async (query: string) => {
+  useEffect(() => {
+    setHistory(getHistory())
+  }, [])
+
+  const [previousAnswer, setPreviousAnswer] = useState<string | null>(null)
+  const [progressStep, setProgressStep] = useState<string | null>(null)
+
+  const handleSearch = async (query: string, context?: string) => {
     setIsLoading(true)
     setError(null)
     setResult(null)
     setLastQuery(query)
+    setProgressStep(null)
 
     try {
-      const response = await fetch("/api/search", {
+      const response = await fetch("/api/search/stream", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -38,22 +51,86 @@ export default function SearchPage() {
           sort: settings.sort,
           date_range: settings.dateRange,
           study_type_filter: settings.studyTypeFilter,
+          context: context || null,
         }),
       })
 
-      const data = await response.json()
-
       if (!response.ok) {
+        const data = await response.json()
         setError(data.error || "Search failed. Please try again.")
         return
       }
 
-      setResult(data)
+      const reader = response.body!.getReader()
+      const decoder = new TextDecoder()
+      let answer = ""
+      let papersFound = 0
+      let papersRetrieved = 0
+      let buffer = ""
+
+      while (true) {
+        const { done, value } = await reader.read()
+        if (done) break
+
+        buffer += decoder.decode(value, { stream: true })
+        const lines = buffer.split("\n")
+        buffer = lines.pop() || ""
+
+        for (const line of lines) {
+          if (!line.startsWith("data: ")) continue
+          try {
+            const event = JSON.parse(line.slice(6))
+
+            if (event.type === "progress") {
+              setProgressStep(event.step)
+            } else if (event.type === "error") {
+              setError(event.message)
+              return
+            } else if (event.type === "metadata") {
+              papersFound = event.papers_found
+              papersRetrieved = event.papers_retrieved
+            } else if (event.type === "token") {
+              answer += event.data
+              setResult({
+                answer,
+                sources: [],
+                papers_found: papersFound,
+                papers_retrieved: papersRetrieved,
+              })
+            } else if (event.type === "sources") {
+              const finalResult: SearchResult = {
+                answer,
+                sources: event.data,
+                papers_found: papersFound,
+                papers_retrieved: papersRetrieved,
+              }
+              setResult(finalResult)
+              setPreviousAnswer(answer)
+              addToHistory(query, finalResult)
+              setHistory(getHistory())
+            }
+          } catch {
+            // skip malformed SSE lines
+          }
+        }
+      }
     } catch {
       setError("Network error. Please check your connection and try again.")
     } finally {
       setIsLoading(false)
+      setProgressStep(null)
     }
+  }
+
+  const handleHistorySelect = (entry: HistoryEntry) => {
+    setLastQuery(entry.query)
+    setResult(entry.result)
+    setError(null)
+  }
+
+  const handleClearHistory = () => {
+    clearHistory()
+    setHistory([])
   }
 
   return (
@@ -78,18 +155,25 @@ export default function SearchPage() {
           <SearchInput
             settings={settings}
             onSettingsChange={setSettings}
-            onSearch={handleSearch}
+            onSearch={(q) => {
+              setPreviousAnswer(null)
+              handleSearch(q)
+            }}
             isLoading={isLoading}
           />
 
+          {/* Search History */}
+          {!result && !isLoading && !error && (
+            <SearchHistory
+              history={history}
+              onSelect={handleHistorySelect}
+              onClear={handleClearHistory}
+            />
+          )}
+
           {/* Loading State */}
-          {isLoading && (
-            <div className="mt-12 text-center">
-              <div className="mx-auto mb-4 h-8 w-8 animate-spin rounded-full border-2 border-teal border-t-transparent" />
-              <p className="text-sm text-muted-foreground">
-                Searching PubMed, fetching abstracts, and synthesizing your answer...
-              </p>
-            </div>
+          {isLoading && !result && (
+            <LoadingProgress currentStep={progressStep} />
           )}
 
           {/* Error State */}
@@ -103,6 +187,16 @@ export default function SearchPage() {
           {result && (
             <div className="mt-8">
               <ResultsPanel result={result} query={lastQuery} />
+            </div>
+          )}
+
+          {/* Follow-up Input */}
+          {result && !isLoading && result.sources.length > 0 && (
+            <div className="mt-6">
+              <FollowUpInput
+                onSubmit={(q) => handleSearch(q, previousAnswer || undefined)}
+                isLoading={isLoading}
+              />
             </div>
           )}
         </div>

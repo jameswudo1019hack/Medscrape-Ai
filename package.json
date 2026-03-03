@@ -1,10 +1,12 @@
 {
-  "name": "synapse-ai",
+  "name": "medscrape",
   "version": "0.1.0",
   "private": true,
   "scripts": {
     "build": "next build",
-    "dev": "next dev",
+    "dev": "npm run dev:backend & next dev",
+    "dev:frontend": "next dev",
+    "dev:backend": "backend/venv/bin/uvicorn --app-dir backend main:app --reload --port 8000",
     "lint": "eslint .",
     "start": "next start"
   },
@@ -12,6 +14,7 @@
     "@radix-ui/react-accordion": "1.2.2",
     "@radix-ui/react-collapsible": "1.1.2",
     "@radix-ui/react-label": "2.1.1",
+    "@radix-ui/react-scroll-area": "^1.2.10",
     "@radix-ui/react-select": "2.1.4",
     "@radix-ui/react-separator": "1.1.1",
     "@radix-ui/react-slider": "1.2.2",
@@ -20,9 +23,11 @@
     "clsx": "^2.1.1",
     "lucide-react": "^0.454.0",
     "next": "16.0.10",
+    "next-themes": "^0.4.6",
     "react": "19.2.0",
     "react-dom": "19.2.0",
     "react-markdown": "^10.1.0",
+    "rehype-raw": "^7.0.0",
     "tailwind-merge": "^3.3.1",
     "tailwindcss-animate": "^1.0.7"
   },

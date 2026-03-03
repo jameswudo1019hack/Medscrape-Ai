@@ -121,6 +121,71 @@ export function SearchSettingsPanel({ settings, onChange }: SearchSettingsProps)
           </SelectContent>
         </Select>
       </div>
+
+      {/* Research Depth */}
+      <div className="space-y-2">
+        <Label>Research depth</Label>
+        <Select
+          value={settings.researchDepth}
+          onValueChange={(value: "standard" | "deep") =>
+            onChange({ ...settings, researchDepth: value })
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="standard">Standard (default)</SelectItem>
+            <SelectItem value="deep">Deep Research (multi-step agent)</SelectItem>
+          </SelectContent>
+        </Select>
+        {settings.researchDepth === "deep" && (
+          <div className="rounded-lg border border-primary/20 bg-primary/5 px-3 py-3 space-y-2">
+            <p className="text-xs font-medium text-primary">How it works</p>
+            <div className="space-y-1">
+              {[
+                "Plan — breaks your question into search aspects",
+                "Search — parallel PubMed + MeSH expansion",
+                "Evaluate — checks which aspects are still uncovered",
+                "Refine — issues targeted follow-up queries",
+                "Synthesize — comprehensive answer from all evidence",
+              ].map((step, i) => (
+                <div key={i} className="flex items-start gap-2">
+                  <span className="mt-0.5 flex size-3.5 shrink-0 items-center justify-center rounded-full bg-primary/20 font-mono text-[9px] text-primary">
+                    {i + 1}
+                  </span>
+                  <span className="text-[11px] leading-relaxed text-muted-foreground">{step}</span>
+                </div>
+              ))}
+            </div>
+            <p className="text-[11px] text-muted-foreground/70">
+              Runs up to 2 refinement cycles. Takes ~2× longer but finds significantly more evidence.
+            </p>
+          </div>
+        )}
+      </div>
+
+      {/* Reference Style */}
+      <div className="space-y-2">
+        <Label>Reference style</Label>
+        <Select
+          value={settings.referenceStyle}
+          onValueChange={(value: SearchSettings["referenceStyle"]) =>
+            onChange({ ...settings, referenceStyle: value })
+          }
+        >
+          <SelectTrigger className="w-full">
+            <SelectValue />
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value="vancouver">Vancouver (default)</SelectItem>
+            <SelectItem value="apa">APA 7th</SelectItem>
+            <SelectItem value="harvard">Harvard</SelectItem>
+            <SelectItem value="ama">AMA</SelectItem>
+            <SelectItem value="chicago">Chicago</SelectItem>
+          </SelectContent>
+        </Select>
+      </div>
     </div>
   )
 }
