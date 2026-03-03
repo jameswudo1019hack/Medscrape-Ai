@@ -123,6 +123,7 @@ def fetch_pmc_fulltext(pmc_id: str) -> Optional[Dict[str, str]]:
             "db": "pmc",
             "id": pmc_id,
             "retmode": "xml",
+            "api_key": "0a1f0f611d675fef92280135607d55276f08",
         })
         url = f"{_EFETCH_URL}?{params}"
         with urllib.request.urlopen(url, timeout=15) as resp:

@@ -1,6 +1,6 @@
 """
 PubMed Tool — Search and fetch abstracts from NCBI PubMed.
-Uses the Entrez E-utilities API (free, no key required for <3 req/s).
+Uses the Entrez E-utilities API with an NCBI API key (10 req/s limit).
 """
 
 import json
@@ -14,6 +14,7 @@ from typing import List, Dict, Any, Optional
 
 ESEARCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/esearch.fcgi"
 EFETCH_URL = "https://eutils.ncbi.nlm.nih.gov/entrez/eutils/efetch.fcgi"
+NCBI_API_KEY = "0a1f0f611d675fef92280135607d55276f08"
 
 # Module-level cache for MeSH lookups within a session
 _mesh_cache: Dict[str, Optional[Dict[str, Any]]] = {}
@@ -64,6 +65,7 @@ def lookup_mesh_terms(query: str) -> Dict[str, Dict[str, Any]]:
             "term": query,
             "retmax": 3,
             "retmode": "json",
+            "api_key": NCBI_API_KEY,
         })
         url = f"{ESEARCH_URL}?{params}"
         with urllib.request.urlopen(url, timeout=5) as resp:
@@ -79,6 +81,7 @@ def lookup_mesh_terms(query: str) -> Dict[str, Dict[str, Any]]:
             "db": "mesh",
             "id": ",".join(ids[:3]),
             "retmode": "xml",
+            "api_key": NCBI_API_KEY,
         })
         url = f"{EFETCH_URL}?{params}"
         with urllib.request.urlopen(url, timeout=5) as resp:
@@ -175,6 +178,7 @@ def search_pubmed(
         "retmax": max_results,
         "sort": sort,
         "retmode": "xml",
+        "api_key": NCBI_API_KEY,
     }
 
     if date_range in ("1", "5"):
@@ -220,6 +224,7 @@ def fetch_abstracts(pmids: List[str]) -> List[Dict]:
         "id": ",".join(pmids),
         "retmode": "xml",
         "rettype": "abstract",
+        "api_key": NCBI_API_KEY,
     })
     
     url = f"{EFETCH_URL}?{params}"
