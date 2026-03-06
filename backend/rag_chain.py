@@ -226,7 +226,7 @@ def build_rag_chain(papers: List[Dict], api_key: str, context: str | None = None
     
     # ── Step 4: Build chain ──────────────────────────────────
     llm = ChatGoogleGenerativeAI(
-        model="gemini-2.5-pro",
+        model="gemini-2.0-flash",
         google_api_key=api_key,
         temperature=0.2,
         max_output_tokens=8192,

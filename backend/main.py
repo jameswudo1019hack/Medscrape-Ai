@@ -326,12 +326,19 @@ async def search_stream(request: SearchRequest):
         raise HTTPException(status_code=400, detail="API key is required")
 
     async def event_generator():
-        # Step 0: Decompose query
+      try:
+        gemini_available = True
+
+        # Step 0: Decompose query (Gemini-dependent, fallback to raw query)
         yield _sse({"type": "progress", "step": "analyzing", "message": "Analyzing query..."})
-        sub_queries = await asyncio.to_thread(decompose_query, request.query, request.api_key)
+        try:
+            sub_queries = await asyncio.to_thread(decompose_query, request.query, request.api_key)
+        except Exception:
+            sub_queries = [request.query]
+            gemini_available = False
         yield _sse({"type": "transparency", "sub_queries": sub_queries})
 
-        # Step 0b: MeSH term lookup
+        # Step 0b: MeSH term lookup (uses NCBI, not Gemini)
         yield _sse({"type": "progress", "step": "searching", "message": "Resolving MeSH terms..."})
         all_mesh_data = {}
 
@@ -361,10 +368,11 @@ async def search_stream(request: SearchRequest):
                 mesh_data = lookup_mesh_terms(sq)
                 mesh_variants = build_mesh_queries(sq, mesh_data)
                 variants.extend(mesh_variants)
-                try:
-                    variants.extend(expand_query(sq, request.api_key))
-                except Exception:
-                    pass
+                if gemini_available:
+                    try:
+                        variants.extend(expand_query(sq, request.api_key))
+                    except Exception:
+                        pass
                 all_variants.extend(variants)
 
             # Search in parallel
@@ -439,16 +447,37 @@ async def search_stream(request: SearchRequest):
         if fulltext_count > 0:
             yield _sse({"type": "transparency", "fulltext_count": fulltext_count})
 
-        # Step 3: Build RAG chain
+        # Step 3: Build RAG chain and stream answer (Gemini-dependent)
         yield _sse({"type": "progress", "step": "analyzing_papers", "message": "Analyzing papers..."})
-        rag_result = await asyncio.to_thread(build_rag_chain, papers, request.api_key, request.context)
+        try:
+            rag_result = await asyncio.to_thread(build_rag_chain, papers, request.api_key, request.context)
 
-        # Step 4: Stream answer
-        yield _sse({"type": "progress", "step": "generating", "message": "Generating answer..."})
-        yield _sse({"type": "metadata", "papers_found": len(pmids), "papers_retrieved": len(papers)})
+            yield _sse({"type": "progress", "step": "generating", "message": "Generating answer..."})
+            yield _sse({"type": "metadata", "papers_found": len(pmids), "papers_retrieved": len(papers)})
 
-        for event in stream_with_sources(rag_result, request.query, papers):
-            yield _sse(event)
+            for event in stream_with_sources(rag_result, request.query, papers):
+                yield _sse(event)
+        except Exception as llm_err:
+            # LLM failed (quota, auth, etc.) — still return papers without AI summary
+            yield _sse({"type": "metadata", "papers_found": len(pmids), "papers_retrieved": len(papers)})
+            fallback_answer = (
+                "**Note:** AI summary unavailable (Gemini API quota exceeded or key invalid). "
+                "Papers were still retrieved successfully — see sources below.\n\n"
+                "Please check your Gemini API key and quota at https://ai.google.dev/gemini-api/docs/rate-limits"
+            )
+            yield _sse({"type": "token", "data": fallback_answer})
+            # Strip full_text from sources to avoid huge payloads
+            clean_papers = [
+                {k: v for k, v in p.items() if k != "full_text"}
+                for p in papers
+            ]
+            yield _sse({"type": "sources", "data": clean_papers})
+            yield _sse({"type": "done"})
+
+      except Exception as e:
+        import traceback
+        traceback.print_exc()
+        yield _sse({"type": "error", "message": f"Internal error: {e}"})
 
     return StreamingResponse(
         event_generator(),
