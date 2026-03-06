@@ -22,7 +22,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json(data)
   } catch {
     return NextResponse.json(
-      { error: "Cannot reach backend. Make sure the FastAPI server is running on port 8000." },
+      { error: "Cannot reach backend. In a second terminal run: npm run dev:backend (see README if you haven’t set up the Python venv)." },
       { status: 503 }
     )
   }

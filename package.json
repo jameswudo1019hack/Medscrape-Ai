@@ -6,7 +6,7 @@
     "build": "next build",
     "dev": "npm run dev:backend & next dev",
     "dev:frontend": "next dev",
-    "dev:backend": "backend/venv/bin/uvicorn --app-dir backend main:app --reload --port 8000",
+    "dev:backend": "node scripts/start-backend.js",
     "lint": "eslint .",
     "start": "next start"
   },

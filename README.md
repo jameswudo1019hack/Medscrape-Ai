@@ -65,6 +65,25 @@ npm run dev:backend    # FastAPI on :8000
 
 Open [http://localhost:3000](http://localhost:3000), enter your Gemini API key in the settings panel, and start asking questions. Your API key is saved in localStorage so you only need to enter it once.
 
+### Troubleshooting: "Cannot reach backend"
+
+If you see **"Cannot reach backend. Make sure the FastAPI server is running on port 8000"**:
+
+1. **Backend must be running.** The app needs both the Next.js frontend and the FastAPI backend. Either:
+   - Run **both** in one go: `npm run dev` (starts frontend + backend; on Windows use two terminals instead — see below), or  
+   - Use **two terminals**:  
+     - Terminal 1: `npm run dev:frontend`  
+     - Terminal 2: `npm run dev:backend`
+2. **Set up the Python backend first** (step 3 above). From the repo root:
+   ```bash
+   cd backend
+   python -m venv venv
+   source venv/bin/activate   # Windows: venv\Scripts\activate
+   pip install -r requirements.txt
+   cd ..
+   ```
+3. **On Windows**, prefer two terminals: run `npm run dev:frontend` in one and `npm run dev:backend` in the other. The single `npm run dev` command may not start both correctly in all shells.
+
 ---
 
 ## How It Works
